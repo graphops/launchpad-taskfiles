@@ -2,7 +2,7 @@
 version: '3'
 
 includes:
-  deps: ./launchpad_deps_{{OS}}.yml
+  update-deps: ./launchpad_deps_{{OS}}.yml
 
 tasks:
   pull-upstream-starter:
@@ -26,18 +26,18 @@ tasks:
       - git pull upstream-starter main --rebase
       - git status
 
-  deps:
-    desc: 'Installs all external dependencies using package manager'
+  update-deps:
+    desc: 'Installs all local Launchpad tooling dependencies'
     cmds:
-      - task: deps:helm
-      - task: deps:helmfile
-      - task: deps:kustomize
-      - task: deps:gum
-      - task: deps:kubectl
-      - task: deps:kubeseal
-      - task: deps:jq
-      - task: deps:gum
-      - task: deps:octant
-      - task: deps:k9s
-      - task: deps:helm-git
-      - task: deps:helm-diff
+      - task: update-deps:helm
+      - task: update-deps:helmfile
+      - task: update-deps:kustomize
+      - task: update-deps:gum
+      - task: update-deps:kubectl
+      - task: update-deps:kubeseal
+      - task: update-deps:jq
+      - task: update-deps:gum
+      - task: update-deps:octant
+      - task: update-deps:k9s
+      - task: update-deps:helm-git
+      - task: update-deps:helm-diff
