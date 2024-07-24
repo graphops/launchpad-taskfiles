@@ -41,6 +41,7 @@ tasks:
         fi
         set -x
         if [ "$COMMAND" = "apply" ]; then
+            echo "\nREMEMBER: To pull the latest charts, be sure to run releases:update-deps before releases:apply\n\n"
             helmfile $DEBUG_LOGS --interactive -f "$NAMESPACE_FILE_PATH" --skip-deps $SELECTOR $COMMAND "$@"
         else
             helmfile $DEBUG_LOGS --interactive -f "$NAMESPACE_FILE_PATH" $SELECTOR $COMMAND "$@"
@@ -85,4 +86,4 @@ tasks:
       - helmfile cache cleanup
       - task: helmfile
         vars:
-          CLI_ARGS: "repos {{.CLI_ARGS}}"
+          CLI_ARGS: "deps {{.CLI_ARGS}}"
