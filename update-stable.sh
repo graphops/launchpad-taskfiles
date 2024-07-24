@@ -38,4 +38,4 @@ if [ "$confirmation" != "y" ]; then
 fi
 
 # Step 7: Force push main
-git push origin stable
+git push origin stable -f
