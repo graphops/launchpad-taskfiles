@@ -28,7 +28,7 @@ if [ "$local_main_commit" != "$remote_main_commit" ]; then
 fi
 
 # Step 5: Update stable tag
-git tag stable
+git tag stable -f
 
 # Step 6: Confirm with the user
 read -p "Are you sure you want to push a new reference for the 'stable'? (y/n): " confirmation
