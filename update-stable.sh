@@ -37,5 +37,5 @@ if [ "$confirmation" != "y" ]; then
     exit 1
 fi
 
-# Step 7: Force push main
+# Step 7: Force push stable tag
 git push origin stable -f
