@@ -2,6 +2,148 @@
 version: '3'
 
 tasks:
+  get-recent-oom:
+    desc: Get recent OOM events from the cluster
+    cmds:
+    - |
+      set - {{ .CLI_ARGS }}
+      set -euo pipefail
+
+      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Fetching pod data from the cluster..."
+      PODS_JSON=$(kubectl get pods --all-namespaces -o json)
+
+      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Processing OOMKilled pod information..."
+
+      # Use jq to:
+      # - Extract pods that have OOMKilled containers.
+      # - For each pod, gather OOMKilled containers and their timestamps.
+      # - Gather other containers in the same pod that are currently running.
+      PODS_OOM=$(echo "$PODS_JSON" | jq '[.items[]
+        | {
+            name: .metadata.name,
+            namespace: .metadata.namespace,
+            nodeName: .spec.nodeName,
+
+            # OOMKilled containers
+            oomContainers: [
+              .status.containerStatuses[]?
+              | select(.lastState.terminated?.reason == "OOMKilled")
+              | {
+                  containerName: .name,
+                  reason: .lastState.terminated.reason,
+                  finishedAt: .lastState.terminated.finishedAt
+                }
+            ],
+
+            # Other currently running containers in the same pod
+            otherContainers: [
+              .status.containerStatuses[]?
+              | select((.lastState.terminated?.reason != "OOMKilled") and (.state.running?))
+              | {
+                  containerName: .name,
+                  startedAt: .state.running.startedAt
+                }
+            ],
+
+            # Container specs for reference
+            containerSpecs: [
+              .spec.containers[]
+              | {
+                  containerName: .name,
+                  memoryRequest: (.resources.requests.memory // "None"),
+                  memoryLimit: (.resources.limits.memory // "None")
+                }
+            ]
+          }
+        | select((.oomContainers | length) > 0)
+      ] | sort_by(.oomContainers[].finishedAt)')
+
+      COUNT=$(echo "$PODS_OOM" | jq 'length')
+
+      echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Found $COUNT pods with OOMKilled containers."
+
+      if [ "$COUNT" -eq 0 ]; then
+          echo "No pods found with OOMKilled containers."
+          exit 0
+      fi
+
+      echo ""
+      echo "========== OOMKilled Pods Detailed Report =========="
+      echo ""
+
+      # JQ filter to add relative hours
+      # Given a timestamp in RFC3339 format (e.g. "2024-12-11T11:21:39Z"),
+      # calculate how many hours ago it was from now.
+      jq_filter='
+        def hours_ago($t):
+          if $t == null then
+            "N/A"
+          else
+            ($t | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) as $ftime
+            | (now - $ftime) as $diff
+            | if $diff < 0 then
+                ($t + " (in the future?)")
+              else
+                ($t + " (" + ( ($diff / 3600) | floor | tostring ) + " hours ago)")
+              end
+          end;
+
+        .[] 
+        | (
+            "Pod Name: " + .name 
+            + "\nNamespace: " + .namespace 
+            + "\nNode: " + (.nodeName // "N/A")
+          )
+          + "\n\nContainers OOMKilled:" 
+          + (
+            if (.oomContainers | length) > 0 then
+              (.oomContainers
+              | map(
+                  "\n  - Container: " + .containerName 
+                  + "\n    Reason: " + (.reason // "N/A")
+                  + "\n    FinishedAt: " + (hours_ago(.finishedAt))
+                )
+              | join("")
+              )
+            else
+              "\n  None"
+            end
+          )
+          + "\n\nOther Running Containers (same pod):"
+          + (
+            if (.otherContainers | length) > 0 then
+              (.otherContainers
+              | map(
+                  "\n  - Container: " + .containerName
+                  + "\n    StartedAt: " + (.startedAt // "N/A")
+                )
+              | join("")
+              )
+            else
+              "\n  None"
+            end
+          )
+          + "\n\nContainer Specs (Memory):"
+          + (
+            if (.containerSpecs | length) > 0 then
+              (.containerSpecs
+              | map(
+                  "\n  - Container: " + .containerName
+                  + "\n    Request: " + .memoryRequest
+                  + "\n    Limit: " + .memoryLimit
+                )
+              | join("")
+              )
+            else
+              "\n  None"
+            end
+          )
+          + "\n------------------------------------------\n"
+      '
+
+      echo "$PODS_OOM" | jq -r "$jq_filter"
+
+
   seal-secret:
     desc: "Util to encrypt secret values and create in cluster only k8s secrets"
     cmds:
