@@ -14,36 +14,36 @@ tasks:
         # Validate required environment variables
         # Show usage if needed
         usage() {
-            echo "Invalid usage."
-            echo
-            echo "Arguments:"
+            printf "Invalid usage.\n"
+            printf "\n"
+            printf "Arguments:\n"
             printf "<command> The Helmfile command to use. "
             if [ -z "$COMMAND" ]; then
-                echo "❌ Not specified"
+                printf "❌ Not specified\n"
             else
-                echo "✅ Current value is $COMMAND"
+                printf "✅ Current value is %s\n" "$COMMAND"
             fi
             
             printf "<namespace> Must be a valid namespace. "
             if [ -z "$NAMESPACE" ]; then
-                echo "❌ Not specified"
+                printf "❌ Not specified\n"
             else
                 printf "Current value is %s. " "$NAMESPACE"
                 if [ ! -f "$NAMESPACE_FILE_PATH" ]; then
-                    echo "❌ Expected file $NAMESPACE_FILE_PATH does not exist"
+                    printf "❌ Expected file %s does not exist\n" "$NAMESPACE_FILE_PATH"
                 else
-                    echo "✅ Expected file $NAMESPACE_FILE_PATH exists"
+                    printf "✅ Expected file %s exists\n" "$NAMESPACE_FILE_PATH"
                 fi
             fi
             
-            echo "[release-name] Optionally select a single release"
+            printf "[release-name] Optionally select a single release\n"
             exit 1
         }
 
         # Parse command and build selector
         COMMAND="${1:-}"
         if [[ -z "$COMMAND" ]]; then
-            echo "❌ Error: Command argument is required"
+            printf "❌ Error: Command argument is required\n"
             usage
         fi
         shift
@@ -71,7 +71,7 @@ tasks:
         DEBUG_LOGS=""
         if [[ "${LAUNCHPAD_VERBOSE_LOGS:-}" == "true" ]]; then
             DEBUG_LOGS="--debug"
-            echo "🔍 Debug logging enabled"
+            printf "🔍 Debug logging enabled\n"
         fi
 
         NAMESPACES_DIR="${NAMESPACES_DIR:-namespaces}"
@@ -79,16 +79,16 @@ tasks:
 
         # Validate namespace file exists
         if [[ ! -f "$NAMESPACE_FILE_PATH" ]]; then
-            echo "❌ Error: Namespace file $NAMESPACE_FILE_PATH does not exist"
+            printf "❌ Error: Namespace file %s does not exist\n" "$NAMESPACE_FILE_PATH"
             usage
         fi
 
         # Warn about sealed-secrets modifications
         if [[ "${NAMESPACE:-}" == "sealed-secrets" ]] && [[ "$COMMAND" != "status" ]]; then
-            echo "⚠️  WARNING: Sealed Secrets Modification"
-            echo "You are about to modify the $NAMESPACE namespace."
-            echo "Deleting the sealed-secrets controller will render all existing SealedSecrets invalid."
-            echo "Make sure you have backup copies of all your secrets."
+            printf "⚠️  WARNING: Sealed Secrets Modification\n"
+            printf "You are about to modify the %s namespace.\n" "$NAMESPACE"
+            printf "Deleting the sealed-secrets controller will render all existing SealedSecrets invalid.\n"
+            printf "Make sure you have backup copies of all your secrets.\n"
             if ! gum confirm --prompt.foreground "#ff0000" "Are you sure you want to continue?"; then
                 usage
             fi
@@ -105,8 +105,8 @@ tasks:
         )
 
         if [[ "$COMMAND" == "apply" ]]; then
-            echo "⚠️  IMPORTANT: To pull the latest charts, be sure to run releases:update-deps before releases:apply"
-            echo
+            printf "⚠️  IMPORTANT: To pull the latest charts, be sure to run releases:update-deps before releases:apply\n"
+            printf "\n"
             (
               set -x
               helmfile "${COMMON_ARGS[@]}" --skip-deps
