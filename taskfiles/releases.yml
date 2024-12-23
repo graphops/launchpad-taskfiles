@@ -3,49 +3,123 @@ version: '3'
 tasks:
   helmfile:
     interactive: true
+    silent: true
     desc: "Wrapper Task for Helmfile used by other Tasks"
     cmds:
       - |
         set - {{ .CLI_ARGS }}
-        COMMAND="$1"; shift
-        SELECTOR=""
-        if [[ -n "$1" ]] && [[ ! "$1" =~ '=' ]]; then
-            SELECTOR+="--selector=namespace=$1"; shift
-        fi
-        if [[ -n "$1" ]] && [[ ! "$1" =~ '=' ]]; then
-            SELECTOR+=",name=$1"; shift
-        fi
-        if [[ -z "$SELECTOR" ]] && [[ "$#" -gt 0 ]]; then
-            SELECTOR+="--selector="
-        fi
-        IFS="" SELECTOR+=$(echo "$*")
-        set -e
-        usage(){
-            echo "Invalid usage."
-            echo
-            echo "Arguments:"
-            echo "<command> The Helmfile command to use. $([ -z "$COMMAND" ] && echo ❌ Not specified || echo ✅ Current value is $COMMAND)."
-            echo "<namespace> Must be a valid namespace. $([ -z "$NAMESPACE" ] && echo ❌ Not specified || echo Current value is $NAMESPACE. $([ ! -f "$NAMESPACE_FILE_PATH" ] && echo ❌ Expected file $NAMESPACE_FILE_PATH does not exist || echo Expected file ✅ $NAMESPACE_FILE_PATH exists))."
-            echo "[release-name] Optionally select a single release"
+        # Store original IFS
+        OLD_IFS="$IFS"
+
+        # Validate required environment variables
+        # Show usage if needed
+        usage() {
+            printf "Invalid usage.\n"
+            printf "\n"
+            printf "Arguments:\n"
+            printf "<command> The Helmfile command to use. "
+            if [ -z "$COMMAND" ]; then
+                printf "❌ Not specified\n"
+            else
+                printf "✅ Current value is %s\n" "$COMMAND"
+            fi
+            
+            printf "<namespace> Must be a valid namespace. "
+            if [ -z "$NAMESPACE" ]; then
+                printf "❌ Not specified\n"
+            else
+                printf "Current value is %s. " "$NAMESPACE"
+                if [ ! -f "$NAMESPACE_FILE_PATH" ]; then
+                    printf "❌ Expected file %s does not exist\n" "$NAMESPACE_FILE_PATH"
+                else
+                    printf "✅ Expected file %s exists\n" "$NAMESPACE_FILE_PATH"
+                fi
+            fi
+            
+            printf "[release-name] Optionally select a single release\n"
             exit 1
         }
+
+        # Parse command and build selector
+        COMMAND="${1:-}"
+        if [[ -z "$COMMAND" ]]; then
+            printf "❌ Error: Command argument is required\n"
+            usage
+        fi
+        shift
+
+        SELECTOR=""
+        # Build selector from namespace and release name if provided
+        if [[ -n "${1:-}" ]] && [[ "$1" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+            NAMESPACE="$1"
+            SELECTOR="--selector=namespace=$NAMESPACE"
+            shift
+            
+            if [[ -n "${1:-}" ]] && [[ ! "$1" =~ '=' ]]; then
+                SELECTOR="${SELECTOR},name=$1"
+                shift
+            fi
+        # Handle raw selector arguments
+        elif (( $# > 0 )); then
+            SELECTOR="--selector=$*"
+        fi
+
+        # Set error handling
+        set -e
+
+        # Configure debug logging
         DEBUG_LOGS=""
-        if [ "$LAUNCHPAD_VERBOSE_LOGS" = "true" ]; then
+        if [[ "${LAUNCHPAD_VERBOSE_LOGS:-}" == "true" ]]; then
             DEBUG_LOGS="--debug"
+            printf "🔍 Debug logging enabled\n"
         fi
-        if [ "$NAMESPACE" = "sealed-secrets" ] && [ "$COMMAND" != "status" ]; then
-            TEXT="You are about to modify the $NAMESPACE namespace.
-        Deleting the sealed-secrets controller will render all existing SealedSecrets invalid.
-        Make sure you have backup copies of all your secrets. Are you sure you want to continue?"
-            gum confirm	--prompt.foreground "#ff0000" "$TEXT"
+
+        NAMESPACES_DIR="${NAMESPACES_DIR:-namespaces}"
+        NAMESPACE_FILE_PATH="${NAMESPACES_DIR}/${NAMESPACE}.yaml"
+
+        # Validate namespace file exists
+        if [[ ! -f "$NAMESPACE_FILE_PATH" ]]; then
+            printf "❌ Error: Namespace file %s does not exist\n" "$NAMESPACE_FILE_PATH"
+            usage
         fi
-        set -x
-        if [ "$COMMAND" = "apply" ]; then
-            echo "\nREMEMBER: To pull the latest charts, be sure to run releases:update-deps before releases:apply\n\n"
-            helmfile $DEBUG_LOGS --interactive -f "$NAMESPACE_FILE_PATH" --skip-deps $SELECTOR $COMMAND "$@"
+
+        # Warn about sealed-secrets modifications
+        if [[ "${NAMESPACE:-}" == "sealed-secrets" ]] && [[ "$COMMAND" != "status" ]]; then
+            printf "⚠️  WARNING: Sealed Secrets Modification\n"
+            printf "You are about to modify the %s namespace.\n" "$NAMESPACE"
+            printf "Deleting the sealed-secrets controller will render all existing SealedSecrets invalid.\n"
+            printf "Make sure you have backup copies of all your secrets.\n"
+            if ! gum confirm --prompt.foreground "#ff0000" "Are you sure you want to continue?"; then
+                usage
+            fi
+        fi
+
+        # Execute helmfile command
+        COMMON_ARGS=(
+          ${DEBUG_LOGS:+"$DEBUG_LOGS"}
+          --interactive
+          -f "$NAMESPACE_FILE_PATH"
+          ${SELECTOR:+"$SELECTOR"}
+          "$COMMAND"
+          "$@"
+        )
+
+        if [[ "$COMMAND" == "apply" ]]; then
+            printf "⚠️  IMPORTANT: To pull the latest charts, be sure to run releases:update-deps before releases:apply\n"
+            printf "\n"
+            (
+              set -x
+              helmfile "${COMMON_ARGS[@]}" --skip-deps
+            )
         else
-            helmfile $DEBUG_LOGS --interactive -f "$NAMESPACE_FILE_PATH" $SELECTOR $COMMAND "$@"
+            (
+              set -x
+              helmfile "${COMMON_ARGS[@]}"
+            )
         fi
+
+        # Restore original IFS
+        IFS="$OLD_IFS"
 
   status:
     interactive: true
