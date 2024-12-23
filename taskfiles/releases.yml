@@ -17,18 +17,18 @@ tasks:
             echo "Invalid usage."
             echo
             echo "Arguments:"
-            echo -n "<command> The Helmfile command to use. "
+            printf "<command> The Helmfile command to use. "
             if [ -z "$COMMAND" ]; then
                 echo "❌ Not specified"
             else
                 echo "✅ Current value is $COMMAND"
             fi
             
-            echo -n "<namespace> Must be a valid namespace. "
+            printf "<namespace> Must be a valid namespace. "
             if [ -z "$NAMESPACE" ]; then
                 echo "❌ Not specified"
             else
-                echo -n "Current value is $NAMESPACE. "
+                printf "Current value is %s. " "$NAMESPACE"
                 if [ ! -f "$NAMESPACE_FILE_PATH" ]; then
                     echo "❌ Expected file $NAMESPACE_FILE_PATH does not exist"
                 else
@@ -50,7 +50,7 @@ tasks:
 
         SELECTOR=""
         # Build selector from namespace and release name if provided
-        if [[ -n "${1:-}" ]] && [[ ! "$1" =~ '=' ]]; then
+        if [[ -n "${1:-}" ]] && [[ "$1" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
             NAMESPACE="$1"
             SELECTOR="--selector=namespace=$NAMESPACE"
             shift
@@ -74,7 +74,8 @@ tasks:
             echo "🔍 Debug logging enabled"
         fi
 
-        NAMESPACE_FILE_PATH="namespaces/${NAMESPACE}.yaml"
+        NAMESPACES_DIR="${NAMESPACES_DIR:-namespaces}"
+        NAMESPACE_FILE_PATH="${NAMESPACES_DIR}/${NAMESPACE}.yaml"
 
         # Validate namespace file exists
         if [[ ! -f "$NAMESPACE_FILE_PATH" ]]; then
@@ -94,28 +95,26 @@ tasks:
         fi
 
         # Execute helmfile command
+        COMMON_ARGS=(
+          ${DEBUG_LOGS:+"$DEBUG_LOGS"}
+          --interactive
+          -f "$NAMESPACE_FILE_PATH"
+          ${SELECTOR:+"$SELECTOR"}
+          "$COMMAND"
+          "$@"
+        )
+
         if [[ "$COMMAND" == "apply" ]]; then
             echo "⚠️  IMPORTANT: To pull the latest charts, be sure to run releases:update-deps before releases:apply"
             echo
             (
               set -x
-              helmfile ${DEBUG_LOGS:+"$DEBUG_LOGS"} \
-                --interactive \
-                -f "$NAMESPACE_FILE_PATH" \
-                --skip-deps \
-                ${SELECTOR:+"$SELECTOR"} \
-                "$COMMAND" \
-                "$@"
+              helmfile "${COMMON_ARGS[@]}" --skip-deps
             )
         else
             (
               set -x
-              helmfile ${DEBUG_LOGS:+"$DEBUG_LOGS"} \
-                --interactive \
-                -f "$NAMESPACE_FILE_PATH" \
-                ${SELECTOR:+"$SELECTOR"} \
-                "$COMMAND" \
-                "$@"
+              helmfile "${COMMON_ARGS[@]}"
             )
         fi
 
