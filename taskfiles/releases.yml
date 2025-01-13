@@ -24,12 +24,14 @@ tasks:
                 printf "✅ Current value is %s\n" "$COMMAND"
             fi
             
-            printf "<namespace> Must be a valid namespace. "
+            printf "<namespace> Must be a valid namespace or 'all'. "
             if [ -z "$NAMESPACE" ]; then
-                printf "❌ Not specified\n"
+                printf "❌ Not specified (defaults to 'all')\n"
             else
                 printf "Current value is %s. " "$NAMESPACE"
-                if [ ! -f "$NAMESPACE_FILE_PATH" ]; then
+                if [ "$NAMESPACE" = "all" ]; then
+                    printf "✅ Using root helmfile.yaml\n"
+                elif [ ! -f "$NAMESPACE_FILE_PATH" ]; then
                     printf "❌ Expected file %s does not exist\n" "$NAMESPACE_FILE_PATH"
                 else
                     printf "✅ Expected file %s exists\n" "$NAMESPACE_FILE_PATH"
@@ -49,19 +51,30 @@ tasks:
         shift
 
         SELECTOR=""
-        # Build selector from namespace and release name if provided
-        if [[ -n "${1:-}" ]] && [[ "$1" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+        NAMESPACE="all"  # Default to "all"
+
+        # First argument without = is treated as namespace
+        if [[ -n "${1:-}" ]] && [[ "$1" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$|^all$ ]]; then
             NAMESPACE="$1"
-            SELECTOR="--selector=namespace=$NAMESPACE"
+            if [[ "$NAMESPACE" != "all" ]]; then
+                SELECTOR="--selector=namespace=$NAMESPACE"
+            fi
             shift
-            
-            if [[ -n "${1:-}" ]] && [[ ! "$1" =~ '=' ]]; then
-                SELECTOR="${SELECTOR},name=$1"
+
+            # If we had a namespace, second argument without = is treated as release name
+            if [[ -n "${1:-}" ]] && [[ "$1" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+                SELECTOR="${SELECTOR:+$SELECTOR,}name=$1"
                 shift
             fi
-        # Handle raw selector arguments
-        elif (( $# > 0 )); then
-            SELECTOR="--selector=$*"
+        fi
+
+        # Handle any remaining arguments as raw selectors
+        if (( $# > 0 )); then
+            if [[ -n "$SELECTOR" ]]; then
+                SELECTOR="${SELECTOR},$*"
+            else
+                SELECTOR="--selector=$*"
+            fi
         fi
 
         # Set error handling
@@ -75,7 +88,11 @@ tasks:
         fi
 
         NAMESPACES_DIR="${NAMESPACES_DIR:-namespaces}"
-        NAMESPACE_FILE_PATH="${NAMESPACES_DIR}/${NAMESPACE}.yaml"
+        if [[ "$NAMESPACE" = "all" ]]; then
+            NAMESPACE_FILE_PATH="helmfile.yaml"
+        else
+            NAMESPACE_FILE_PATH="${NAMESPACES_DIR}/${NAMESPACE}.yaml"
+        fi
 
         # Validate namespace file exists
         if [[ ! -f "$NAMESPACE_FILE_PATH" ]]; then
