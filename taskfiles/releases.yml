@@ -24,14 +24,12 @@ tasks:
                 printf "✅ Current value is %s\n" "$COMMAND"
             fi
             
-            printf "<namespace> Must be a valid namespace or 'all'. "
+            printf "<namespace> Can be a valid namespace. "
             if [ -z "$NAMESPACE" ]; then
-                printf "❌ Not specified (defaults to 'all')\n"
+                printf "✅ Namespace not specified, using root helmfile.yaml\n"
             else
                 printf "Current value is %s. " "$NAMESPACE"
-                if [ "$NAMESPACE" = "all" ]; then
-                    printf "✅ Using root helmfile.yaml\n"
-                elif [ ! -f "$NAMESPACE_FILE_PATH" ]; then
+                if [ ! -f "$NAMESPACE_FILE_PATH" ]; then
                     printf "❌ Expected file %s does not exist\n" "$NAMESPACE_FILE_PATH"
                 else
                     printf "✅ Expected file %s exists\n" "$NAMESPACE_FILE_PATH"
@@ -51,14 +49,12 @@ tasks:
         shift
 
         SELECTOR=""
-        NAMESPACE="all"  # Default to "all"
+        NAMESPACE=""  # Default to empty
 
         # First argument without = is treated as namespace
-        if [[ -n "${1:-}" ]] && [[ "$1" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$|^all$ ]]; then
+        if [[ -n "${1:-}" ]] && [[ "$1" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
             NAMESPACE="$1"
-            if [[ "$NAMESPACE" != "all" ]]; then
-                SELECTOR="--selector=namespace=$NAMESPACE"
-            fi
+            SELECTOR="--selector=namespace=$NAMESPACE"
             shift
 
             # If we had a namespace, second argument without = is treated as release name
@@ -88,7 +84,7 @@ tasks:
         fi
 
         NAMESPACES_DIR="${NAMESPACES_DIR:-namespaces}"
-        if [[ "$NAMESPACE" = "all" ]]; then
+        if [[ -z "$NAMESPACE" ]]; then
             NAMESPACE_FILE_PATH="helmfile.yaml"
         else
             NAMESPACE_FILE_PATH="${NAMESPACES_DIR}/${NAMESPACE}.yaml"
