@@ -146,18 +146,21 @@ tasks:
 
   seal-secret:
     desc: "Util to encrypt secret values and create in cluster only k8s secrets"
+    interactive: true
+    silent: true
     cmds:
       - |
         set - {{ .CLI_ARGS }}
         set -eu
 
         usage() {
-          echo "Usage: seal-secret -- < -n namespace> < -s secret-name> < -k key> < -v value> [ -c context-name]"
-          echo "< -n namespace> is the k8s namespace intended for the secret"
-          echo "< -s secret-name> is the k8s secret name the controller will create"
-          echo "< -k key> is the k8s secret key name"
-          echo "< -v value> is the secret value being encrypted"
-          echo "[-c context-name] will default to current-context unless provided"
+          echo "Usage: seal-secret -- [-n namespace] [-s secret-name] [-k key] [-v value] [-c context-name]"
+          echo "All arguments are optional and will be prompted for if not provided:"
+          echo "[-n namespace] The k8s namespace intended for the secret"
+          echo "[-s secret-name] The k8s secret name the controller will create" 
+          echo "[-k key] The k8s secret key name"
+          echo "[-v value] The secret value being encrypted"
+          echo "[-c context-name] Will default to current-context unless provided"
           exit 1
         }
 
@@ -179,17 +182,38 @@ tasks:
           esac
         done
 
-        if [ -z "$CLUSTER_CONTEXT" ]; then
-            echo "Cluster context not set, using currently set context $(kubectl config current-context)"
-            echo "If you're creating a secret for a different cluster rerun the script and pass the context name for the cluster"
-            echo ""
-            CLUSTER_CONTEXT=$(kubectl config current-context)
-        else 
-            echo "Context name set - creating secret $SECRET_NAME against $CLUSTER_CONTEXT"
-            kubectl config use-context "$CLUSTER_CONTEXT"
+        # Interactive prompts for missing values
+        if [ -z "$NAMESPACE" ]; then
+          read -p "Enter namespace: " NAMESPACE
+        fi
+
+        if [ -z "$SECRET_NAME" ]; then
+          read -p "Enter secret name: " SECRET_NAME
+        fi
+
+        if [ -z "$KEY" ]; then
+          read -p "Enter secret key: " KEY
         fi
 
         if [ -z "$VALUE" ]; then
+          read -p "Enter secret value (hidden): " -s VALUE
+          echo "" # Add newline after hidden input
+        fi
+
+        if [ -z "$CLUSTER_CONTEXT" ]; then
+          CURRENT_CONTEXT=$(kubectl config current-context)
+          echo "Cluster context not set, using currently set context $CURRENT_CONTEXT"
+          echo "If you're creating a secret for a different cluster rerun the script and pass the context name for the cluster"
+          echo ""
+          CLUSTER_CONTEXT=$CURRENT_CONTEXT
+        else 
+          echo "Context name set - creating secret $SECRET_NAME against $CLUSTER_CONTEXT"
+          kubectl config use-context "$CLUSTER_CONTEXT"
+        fi
+
+        # Validate that we have all required values
+        if [ -z "$NAMESPACE" ] || [ -z "$SECRET_NAME" ] || [ -z "$KEY" ] || [ -z "$VALUE" ]; then
+          echo "Error: All values must be provided either via arguments or interactive input"
           usage
         fi
 
