@@ -161,8 +161,10 @@ tasks:
           echo "[-k key] The k8s secret key name"
           echo "[-v value] The secret value being encrypted"
           echo "[-c context-name] Will default to current-context unless provided"
-          exit 1
         }
+
+        # Print usage first
+        usage
 
         NAMESPACE="${NAMESPACE:-}"
         SECRET_NAME="${NAME:-}"
@@ -182,6 +184,15 @@ tasks:
           esac
         done
 
+        # Print status of variables before interactive prompts
+        echo -e "\nCurrent variable status:"
+        [ -n "$NAMESPACE" ] && echo "✓ Namespace is set to: $NAMESPACE" || echo "⨯ Namespace needs to be set interactively"
+        [ -n "$SECRET_NAME" ] && echo "✓ Secret name is set to: $SECRET_NAME" || echo "⨯ Secret name needs to be set interactively"
+        [ -n "$KEY" ] && echo "✓ Key is set to: $KEY" || echo "⨯ Key needs to be set interactively"
+        [ -n "$VALUE" ] && echo "✓ Value is set" || echo "⨯ Value needs to be set interactively"
+        [ -n "$CLUSTER_CONTEXT" ] && echo "✓ Cluster context is set to: $CLUSTER_CONTEXT" || echo "⨯ Cluster context will use current context"
+        echo ""
+
         # Interactive prompts for missing values
         if [ -z "$NAMESPACE" ]; then
           read -p "Enter namespace: " NAMESPACE
@@ -196,7 +207,9 @@ tasks:
         fi
 
         if [ -z "$VALUE" ]; then
-          read -p "Enter secret value (hidden): " -s VALUE
+          stty -echo
+          read -p "Enter secret value (hidden): " VALUE
+          stty echo
           echo "" # Add newline after hidden input
         fi
 
@@ -215,6 +228,7 @@ tasks:
         if [ -z "$NAMESPACE" ] || [ -z "$SECRET_NAME" ] || [ -z "$KEY" ] || [ -z "$VALUE" ]; then
           echo "Error: All values must be provided either via arguments or interactive input"
           usage
+          exit 1
         fi
 
         secretManifest=$(echo -n "${VALUE}" | kubectl create secret generic "${SECRET_NAME}" --dry-run=client --namespace "${NAMESPACE}"  --from-literal="${KEY}"="${VALUE}" -o json 2>&1)
