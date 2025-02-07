@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
 # tasks that relate to launchpad, launchpad-core and repo setup
 version: '3'
 
